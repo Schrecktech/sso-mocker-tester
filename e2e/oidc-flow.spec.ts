@@ -5,10 +5,15 @@ const ISSUER = process.env.OIDC_ISSUER || 'http://localhost:9090';
 const ADMIN_URL = `${ISSUER}/admin/v1`;
 
 test.describe('SSO Mocker OIDC Integration', () => {
-  test.beforeEach(async ({ context }) => {
-    // Clear all browser state (cookies for all domains + storage)
+  test.beforeEach(async ({ page, context }) => {
+    // Clear cookies for all domains (SPA + mocker)
     await context.clearCookies();
-    // Reset mocker state between tests
+    // Clear SPA sessionStorage
+    await page.goto(BASE_URL);
+    await page.evaluate(() => sessionStorage.clear());
+    // Navigate to mocker to clear its cookies from browser too
+    await page.goto(`${ISSUER}/health`);
+    // Reset mocker server state (sessions, tokens, users)
     await fetch(`${ADMIN_URL}/reset`, { method: 'POST' });
   });
 
