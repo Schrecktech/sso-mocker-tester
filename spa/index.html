@@ -74,7 +74,7 @@
   <script>
     const ISSUER = window.SSO_MOCKER_ISSUER || 'http://localhost:9090';
     const CLIENT_ID = 'my-spa';
-    const REDIRECT_URI = window.location.origin + window.location.pathname;
+    const REDIRECT_URI = window.location.origin + '/callback';
 
     document.getElementById('issuer-display').textContent = ISSUER;
 
@@ -245,12 +245,12 @@
       sessionStorage.removeItem('pkce_verifier');
       sessionStorage.removeItem('oauth_state');
 
-      window.history.replaceState({}, '', window.location.pathname);
+      window.history.replaceState({}, '', '/');
       showAuthenticated(claims, tokens.id_token);
     }
 
     // Check for callback or existing session
-    if (window.location.search.indexOf('code=') !== -1) {
+    if (window.location.pathname === '/callback' || window.location.search.indexOf('code=') !== -1) {
       handleCallback();
     } else if (sessionStorage.getItem('id_token')) {
       var claims = parseJwt(sessionStorage.getItem('id_token'));

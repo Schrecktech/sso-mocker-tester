@@ -5,7 +5,9 @@ const ISSUER = process.env.OIDC_ISSUER || 'http://localhost:9090';
 const ADMIN_URL = `${ISSUER}/admin/v1`;
 
 test.describe('SSO Mocker OIDC Integration', () => {
-  test.beforeEach(async () => {
+  test.beforeEach(async ({ context }) => {
+    // Clear all browser state (cookies for all domains + storage)
+    await context.clearCookies();
     // Reset mocker state between tests
     await fetch(`${ADMIN_URL}/reset`, { method: 'POST' });
   });
@@ -38,8 +40,8 @@ test.describe('SSO Mocker OIDC Integration', () => {
     await page.waitForURL('**/interaction/**');
     await page.screenshot({ path: 'screenshots/03-sso-mocker-login-form.png', fullPage: true });
 
-    // Select Alice and sign in
-    await page.getByTestId('user-alice').click();
+    // Select Alice's radio button and sign in
+    await page.getByTestId('user-alice').locator('input[type="radio"]').click();
     await page.getByTestId('sign-in').click();
 
     // Should redirect back to SPA with claims displayed
@@ -75,7 +77,7 @@ test.describe('SSO Mocker OIDC Integration', () => {
   });
 
   test('switch users shows different claims', async ({ page }) => {
-    // Login as Carol (viewer) via form mode
+    // Set form mode so we can pick Carol
     await fetch(`${ADMIN_URL}/config/login`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -86,8 +88,8 @@ test.describe('SSO Mocker OIDC Integration', () => {
     await page.getByTestId('login-btn').click();
     await page.waitForURL('**/interaction/**');
 
-    // Select Carol instead of Alice
-    await page.getByTestId('user-carol').click();
+    // Select Carol's radio button
+    await page.getByTestId('user-carol').locator('input[type="radio"]').click();
     await page.screenshot({ path: 'screenshots/06-selecting-carol.png', fullPage: true });
 
     await page.getByTestId('sign-in').click();
