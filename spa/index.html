@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SSO Mocker Test App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f7fa; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); padding: 40px; max-width: 520px; width: 100%; }
+    h1 { font-size: 1.5em; margin-bottom: 8px; }
+    .subtitle { color: #666; margin-bottom: 24px; }
+    .status { padding: 16px; border-radius: 8px; margin: 16px 0; }
+    .status.unauthenticated { background: #fff3cd; border: 1px solid #ffc107; }
+    .status.authenticated { background: #d4edda; border: 1px solid #28a745; }
+    .status.error { background: #f8d7da; border: 1px solid #dc3545; }
+    .claims { background: #f8f9fa; border-radius: 8px; padding: 16px; margin: 16px 0; font-size: 0.9em; }
+    .claims table { width: 100%; border-collapse: collapse; }
+    .claims td { padding: 6px 8px; border-bottom: 1px solid #e9ecef; }
+    .claims td:first-child { font-weight: 600; color: #495057; width: 120px; }
+    .claims .scopes { display: flex; flex-wrap: wrap; gap: 4px; }
+    .claims .scope-tag { background: #e3f2fd; color: #1565c0; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
+    .claims .team-tag { background: #e8f5e9; color: #2e7d32; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
+    button { padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-size: 1em; font-weight: 500; transition: background 0.2s; }
+    .btn-login { background: #0066cc; color: white; }
+    .btn-login:hover { background: #0052a3; }
+    .btn-logout { background: #dc3545; color: white; margin-left: 8px; }
+    .btn-logout:hover { background: #c82333; }
+    .actions { margin-top: 20px; }
+    .raw-token { margin-top: 16px; }
+    .raw-token summary { cursor: pointer; color: #666; font-size: 0.85em; }
+    .raw-token pre { background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.8em; margin-top: 8px; max-height: 200px; }
+    #config-info { font-size: 0.85em; color: #888; margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 data-testid="app-title">SSO Mocker Test App</h1>
+    <p class="subtitle">OIDC Authentication Integration Test</p>
+
+    <div id="status" class="status unauthenticated" data-testid="status">
+      Not authenticated
+    </div>
+
+    <div id="claims" class="claims" style="display:none" data-testid="claims">
+      <table>
+        <tr><td>Subject</td><td data-testid="claim-sub"></td></tr>
+        <tr><td>Email</td><td data-testid="claim-email"></td></tr>
+        <tr><td>Name</td><td data-testid="claim-name"></td></tr>
+        <tr><td>Role</td><td data-testid="claim-role"></td></tr>
+        <tr><td>Teams</td><td data-testid="claim-teams"></td></tr>
+        <tr><td>Scopes</td><td data-testid="claim-scopes"></td></tr>
+        <tr><td>Issuer</td><td data-testid="claim-iss"></td></tr>
+      </table>
+    </div>
+
+    <div class="actions">
+      <button id="login-btn" class="btn-login" data-testid="login-btn" onclick="login()">Sign In with SSO Mocker</button>
+      <button id="logout-btn" class="btn-logout" data-testid="logout-btn" onclick="logout()" style="display:none">Sign Out</button>
+    </div>
+
+    <div id="raw-token" class="raw-token" style="display:none">
+      <details>
+        <summary>Raw ID Token</summary>
+        <pre data-testid="raw-token"></pre>
+      </details>
+    </div>
+
+    <div id="config-info" data-testid="config-info">
+      Issuer: <span id="issuer-display">loading...</span>
+    </div>
+  </div>
+
+  <script>
+    const ISSUER = window.SSO_MOCKER_ISSUER || 'http://localhost:9090';
+    const CLIENT_ID = 'my-spa';
+    const REDIRECT_URI = window.location.origin + window.location.pathname;
+
+    document.getElementById('issuer-display').textContent = ISSUER;
+
+    let discoveryCache = null;
+
+    async function discover() {
+      if (discoveryCache) return discoveryCache;
+      const res = await fetch(ISSUER + '/.well-known/openid-configuration');
+      discoveryCache = await res.json();
+      return discoveryCache;
+    }
+
+    function generateCodeVerifier() {
+      const array = new Uint8Array(32);
+      crypto.getRandomValues(array);
+      return btoa(String.fromCharCode.apply(null, array)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    }
+
+    async function generateCodeChallenge(verifier) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(verifier);
+      const digest = await crypto.subtle.digest('SHA-256', data);
+      return btoa(String.fromCharCode.apply(null, new Uint8Array(digest))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    }
+
+    function parseJwt(token) {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join('')));
+    }
+
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    async function login() {
+      var disco = await discover();
+      var codeVerifier = generateCodeVerifier();
+      var codeChallenge = await generateCodeChallenge(codeVerifier);
+      var state = crypto.randomUUID();
+
+      sessionStorage.setItem('pkce_verifier', codeVerifier);
+      sessionStorage.setItem('oauth_state', state);
+
+      var params = new URLSearchParams({
+        response_type: 'code',
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        scope: 'openid profile email',
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+        state: state,
+      });
+
+      window.location.href = disco.authorization_endpoint + '?' + params;
+    }
+
+    function renderClaim(testid, value) {
+      document.querySelector('[data-testid="' + testid + '"]').textContent = value;
+    }
+
+    function renderTags(testid, values, className) {
+      var container = document.querySelector('[data-testid="' + testid + '"]');
+      container.textContent = '';
+      var wrapper = document.createElement('div');
+      wrapper.className = 'scopes';
+      (values || []).forEach(function(v) {
+        var tag = document.createElement('span');
+        tag.className = className;
+        tag.textContent = v;
+        wrapper.appendChild(tag);
+      });
+      if (!values || values.length === 0) {
+        wrapper.textContent = 'none';
+      }
+      container.appendChild(wrapper);
+    }
+
+    function showAuthenticated(claims, rawToken) {
+      var statusEl = document.getElementById('status');
+      statusEl.className = 'status authenticated';
+      statusEl.textContent = '';
+      var text = document.createTextNode('Authenticated as ');
+      var strong = document.createElement('strong');
+      strong.setAttribute('data-testid', 'user-name');
+      strong.textContent = claims.name || claims.sub;
+      statusEl.appendChild(text);
+      statusEl.appendChild(strong);
+
+      document.getElementById('claims').style.display = 'block';
+      renderClaim('claim-sub', claims.sub);
+      renderClaim('claim-email', claims.email || 'N/A');
+      renderClaim('claim-name', claims.name || 'N/A');
+      renderClaim('claim-role', claims.role || 'N/A');
+      renderTags('claim-teams', claims.teams, 'team-tag');
+      renderTags('claim-scopes', claims.scopes, 'scope-tag');
+      renderClaim('claim-iss', claims.iss);
+
+      document.getElementById('login-btn').style.display = 'none';
+      document.getElementById('logout-btn').style.display = 'inline-block';
+
+      var rawEl = document.getElementById('raw-token');
+      rawEl.style.display = 'block';
+      rawEl.querySelector('pre').textContent = JSON.stringify(claims, null, 2);
+    }
+
+    function showError(message) {
+      var statusEl = document.getElementById('status');
+      statusEl.className = 'status error';
+      statusEl.textContent = message;
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+
+    function logout() {
+      sessionStorage.clear();
+      window.location.href = window.location.pathname;
+    }
+
+    async function handleCallback() {
+      var params = new URLSearchParams(window.location.search);
+      var code = params.get('code');
+      var state = params.get('state');
+      var error = params.get('error');
+
+      if (error) {
+        showError('Authentication failed: ' + error + ' - ' + (params.get('error_description') || ''));
+        return;
+      }
+
+      if (!code) return;
+
+      var savedState = sessionStorage.getItem('oauth_state');
+      if (state !== savedState) {
+        showError('State mismatch - possible CSRF attack');
+        return;
+      }
+
+      var codeVerifier = sessionStorage.getItem('pkce_verifier');
+      var disco = await discover();
+
+      var tokenRes = await fetch(disco.token_endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'authorization_code',
+          code: code,
+          redirect_uri: REDIRECT_URI,
+          client_id: CLIENT_ID,
+          code_verifier: codeVerifier,
+        }),
+      });
+
+      if (!tokenRes.ok) {
+        var err = await tokenRes.json();
+        showError('Token exchange failed: ' + err.error + ' - ' + (err.error_description || ''));
+        return;
+      }
+
+      var tokens = await tokenRes.json();
+      var claims = parseJwt(tokens.id_token);
+
+      sessionStorage.setItem('id_token', tokens.id_token);
+      sessionStorage.setItem('access_token', tokens.access_token);
+      sessionStorage.removeItem('pkce_verifier');
+      sessionStorage.removeItem('oauth_state');
+
+      window.history.replaceState({}, '', window.location.pathname);
+      showAuthenticated(claims, tokens.id_token);
+    }
+
+    // Check for callback or existing session
+    if (window.location.search.indexOf('code=') !== -1) {
+      handleCallback();
+    } else if (sessionStorage.getItem('id_token')) {
+      var claims = parseJwt(sessionStorage.getItem('id_token'));
+      showAuthenticated(claims, sessionStorage.getItem('id_token'));
+    }
+  </script>
+</body>
+</html>

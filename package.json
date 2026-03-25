@@ -1,0 +1,14 @@
+{
+  "name": "sso-mocker-tester",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "npx serve spa -l 3000",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "serve": "^14.2.0"
+  }
+}

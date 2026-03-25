@@ -1,0 +1,79 @@
+name: E2E Integration Test
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # Start SSO Mocker via the GitHub Action
+      - uses: Schrecktech/sso-mocker@main
+        id: sso
+        with:
+          environment: integration
+          login-mode: form
+          auto-login-user: alice
+
+      # Install test dependencies
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+
+      # Start the SPA on port 3000
+      - name: Start SPA server
+        run: npx serve spa -l 3000 &
+      - name: Wait for SPA
+        run: timeout 15 bash -c 'until curl -sf http://localhost:3000 > /dev/null 2>&1; do sleep 1; done'
+
+      # Inject the issuer URL into the SPA via env var safe pattern
+      - name: Configure SPA issuer
+        env:
+          SSO_ISSUER: ${{ steps.sso.outputs.issuer }}
+        run: |
+          sed -i "s|window.SSO_MOCKER_ISSUER || 'http://localhost:9090'|'${SSO_ISSUER}'|" spa/index.html
+
+      # Create screenshots directory
+      - run: mkdir -p screenshots
+
+      # Run Playwright tests with video and screenshots
+      - name: Run Playwright tests
+        env:
+          BASE_URL: http://localhost:3000
+          OIDC_ISSUER: ${{ steps.sso.outputs.issuer }}
+        run: npx playwright test
+
+      # Upload screenshots as artifacts
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots/
+          retention-days: 14
+
+      # Upload Playwright report with videos and traces
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      # Upload raw test results (includes videos)
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 14
