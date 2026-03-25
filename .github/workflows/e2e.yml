@@ -28,18 +28,19 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
 
-      # Start the SPA on port 3000
-      - name: Start SPA server
-        run: npx serve spa -l 3000 &
-      - name: Wait for SPA
-        run: timeout 15 bash -c 'until curl -sf http://localhost:3000 > /dev/null 2>&1; do sleep 1; done'
-
-      # Inject the issuer URL into the SPA
+      # Patch SPA issuer BEFORE starting the server
       - name: Configure SPA issuer
         env:
           SSO_ISSUER: ${{ steps.sso.outputs.issuer }}
         run: |
           sed -i "s#window.SSO_MOCKER_ISSUER || 'http://localhost:9090'#'${SSO_ISSUER}'#" spa/index.html
+          grep "SSO_MOCKER_ISSUER\|ISSUER" spa/index.html | head -2
+
+      # Start the SPA on port 3000 (after patching)
+      - name: Start SPA server
+        run: npx serve spa -l 3000 &
+      - name: Wait for SPA
+        run: timeout 15 bash -c 'until curl -sf http://localhost:3000 > /dev/null 2>&1; do sleep 1; done'
 
       # Create screenshots directory
       - run: mkdir -p screenshots
