@@ -77,22 +77,17 @@ test.describe('SSO Mocker OIDC Integration', () => {
   });
 
   test('switch users shows different claims', async ({ page }) => {
-    // Set form mode so we can pick Carol
+    // Switch auto-login to Carol via Admin API
     await fetch(`${ADMIN_URL}/config/login`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'form' }),
+      body: JSON.stringify({ mode: 'auto', autoLoginUser: 'carol' }),
     });
 
     await page.goto(BASE_URL);
+    await page.screenshot({ path: 'screenshots/06-before-carol-login.png', fullPage: true });
+
     await page.getByTestId('login-btn').click();
-    await page.waitForURL('**/interaction/**');
-
-    // Select Carol's radio button
-    await page.getByTestId('user-carol').locator('input[type="radio"]').click();
-    await page.screenshot({ path: 'screenshots/06-selecting-carol.png', fullPage: true });
-
-    await page.getByTestId('sign-in').click();
     await page.waitForSelector('[data-testid="user-name"]');
     await page.screenshot({ path: 'screenshots/07-authenticated-carol.png', fullPage: true });
 
