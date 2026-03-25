@@ -92,19 +92,19 @@ test.describe('SSO Mocker OIDC Integration', () => {
     await fetch(`${ADMIN_URL}/config/login`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode: 'auto', autoLoginUser: 'carol' }),
+      body: JSON.stringify({ mode: 'auto', autoLoginUser: 'test-viewer' }),
     });
 
     await page.goto(BASE_URL);
-    await page.screenshot({ path: 'screenshots/06-before-carol-login.png', fullPage: true });
+    await page.screenshot({ path: 'screenshots/06-before-viewer-login.png', fullPage: true });
 
     await page.getByTestId('login-btn').click();
     await page.waitForSelector('[data-testid="user-name"]');
-    await page.screenshot({ path: 'screenshots/07-authenticated-carol.png', fullPage: true });
+    await page.screenshot({ path: 'screenshots/07-authenticated-viewer.png', fullPage: true });
 
-    // Verify Carol's claims are different from Alice
-    await expect(page.getByTestId('user-name')).toHaveText('Carol Viewer');
-    await expect(page.getByTestId('claim-sub')).toHaveText('carol');
+    // Verify viewer claims are different from Alice (admin)
+    await expect(page.getByTestId('user-name')).toHaveText('CI Viewer');
+    await expect(page.getByTestId('claim-sub')).toHaveText('test-viewer');
     await expect(page.getByTestId('claim-role')).toHaveText('viewer');
 
     await context.close();
