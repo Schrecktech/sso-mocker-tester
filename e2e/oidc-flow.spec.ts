@@ -81,8 +81,13 @@ test.describe('SSO Mocker OIDC Integration', () => {
     await expect(page.getByTestId('claim-role')).toHaveText('admin');
   });
 
-  test('switch users shows different claims', async ({ page }) => {
-    // Switch auto-login to Carol via Admin API
+  test('switch users shows different claims', async ({ browser }) => {
+    // Fresh browser context — no cookies from previous tests
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    // Reset server state and switch auto-login to Carol
+    await fetch(`${ADMIN_URL}/reset`, { method: 'POST' });
     await fetch(`${ADMIN_URL}/config/login`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -100,6 +105,8 @@ test.describe('SSO Mocker OIDC Integration', () => {
     await expect(page.getByTestId('user-name')).toHaveText('Carol Viewer');
     await expect(page.getByTestId('claim-sub')).toHaveText('carol');
     await expect(page.getByTestId('claim-role')).toHaveText('viewer');
+
+    await context.close();
   });
 
   test('logout returns to unauthenticated state', async ({ page }) => {
