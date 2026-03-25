@@ -34,12 +34,12 @@ jobs:
       - name: Wait for SPA
         run: timeout 15 bash -c 'until curl -sf http://localhost:3000 > /dev/null 2>&1; do sleep 1; done'
 
-      # Inject the issuer URL into the SPA via env var safe pattern
+      # Inject the issuer URL into the SPA
       - name: Configure SPA issuer
         env:
           SSO_ISSUER: ${{ steps.sso.outputs.issuer }}
         run: |
-          sed -i "s|window.SSO_MOCKER_ISSUER || 'http://localhost:9090'|'${SSO_ISSUER}'|" spa/index.html
+          sed -i "s#window.SSO_MOCKER_ISSUER || 'http://localhost:9090'#'${SSO_ISSUER}'#" spa/index.html
 
       # Create screenshots directory
       - run: mkdir -p screenshots
