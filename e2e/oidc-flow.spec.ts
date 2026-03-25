@@ -82,7 +82,6 @@ test.describe('SSO Mocker OIDC Integration', () => {
   });
 
   test('switch users shows different claims', async ({ browser, page: _unused }) => {
-    test.setTimeout(10000);
     // Fresh browser context — no cookies from previous tests
     const context = await browser.newContext();
     const page = await context.newPage();
